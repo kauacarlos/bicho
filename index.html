@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Insights Jogo do Bicho</title>
+    <style>
+        :root {
+            --bg-color: #f4f4f9;
+            --primary: #0056b3;
+            --secondary: #007bff;
+            --text-dark: #333;
+            --card-bg: #fff;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-color);
+            color: var(--text-dark);
+        }
+        header {
+            background-color: var(--primary);
+            color: white;
+            text-align: center;
+            padding: 1rem;
+            font-size: 1.2rem;
+            font-weight: bold;
+        }
+        .tabs {
+            display: flex;
+            background-color: var(--secondary);
+        }
+        .tab {
+            flex: 1;
+            text-align: center;
+            padding: 15px 10px;
+            color: white;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 0.9rem;
+            transition: background 0.3s;
+        }
+        .tab:hover, .tab.active {
+            background-color: var(--primary);
+        }
+        .container {
+            padding: 20px;
+        }
+        .section {
+            display: none;
+            background: var(--card-bg);
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .section.active {
+            display: block;
+        }
+        input, button {
+            width: 100%;
+            padding: 12px;
+            margin: 10px 0;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+            box-sizing: border-box;
+            font-size: 1rem;
+        }
+        button {
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #004494;
+        }
+        .result-box {
+            margin-top: 15px;
+            padding: 15px;
+            background-color: #e9ecef;
+            border-radius: 5px;
+            border-left: 5px solid var(--primary);
+        }
+        .ranking-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #ccc;
+        }
+        .ranking-item:last-child {
+            border-bottom: none;
+        }
+        .loader {
+            text-align: center;
+            font-weight: bold;
+            color: var(--primary);
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+
+    <header>Bicho Insights</header>
+
+    <div class="tabs">
+        <div class="tab active" onclick="showTab('grupo')">GRUPO</div>
+        <div class="tab" onclick="showTab('terno')">TERNO</div>
+        <div class="tab" onclick="showTab('palpite')">PALPITE</div>
+    </div>
+
+    <div class="container">
+        <div id="loader" class="loader">Carregando dados estatísticos...</div>
+
+        <!-- SEÇÃO GRUPO -->
+        <div id="grupo" class="section active">
+            <h3>Consultar Grupo (1º Prêmio)</h3>
+            <p>Qual foi o último bicho que deu em 1º lugar?</p>
+            <input type="text" id="input-grupo" placeholder="Ex: Gato, Avestruz, Cobra...">
+            <button onclick="analisarGrupo()">Analisar Próximos</button>
+            <div id="resultado-grupo"></div>
+        </div>
+
+        <!-- SEÇÃO TERNO -->
+        <div id="terno" class="section">
+            <h3>Ranking de Ternos (1 ao 5 ou 6 ao 10)</h3>
+            <p>Descubra os trios que mais saem juntos nos blocos superior e inferior.</p>
+            <button onclick="analisarTernos()">Gerar Top Ternos</button>
+            <div id="resultado-terno"></div>
+        </div>
+
+        <!-- SEÇÃO PALPITE COMPLETO -->
+        <div id="palpite" class="section">
+            <h3>Palpite Completo</h3>
+            <p>Digite o último resultado completo (os 10 bichos na ordem) para o app calcular o palpite mais provável para o próximo sorteio.</p>
+            <div id="inputs-palpite">
+                <!-- Inputs criados dinamicamente via JS -->
+            </div>
+            <button onclick="gerarPalpite()">Gerar Palpite Inteligente</button>
+            <div id="resultado-palpite"></div>
+        </div>
+    </div>
+
+    <script>
+        // Variável para armazenar a linha do tempo cronológica de todos os sorteios
+        let linhaDoTempo = [];
+
+        // Inicialização
+        document.addEventListener("DOMContentLoaded", () => {
+            fetchData();
+            gerarCamposPalpite();
+        });
+
+        // Alternar abas
+        function showTab(tabId) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+            
+            event.target.classList.add('active');
+            document.getElementById(tabId).classList.add('active');
+        }
+
+        // Buscar e formatar os dados
+        async function fetchData() {
+            try {
+                const response = await fetch('bd_lotep_2026.json');
+                const data = await response.json();
+                
+                // Ordenar datas cronologicamente
+                const datasOrdenadas = Object.keys(data).sort();
+                
+                datasOrdenadas.forEach(dataKey => {
+                    // Ordenar os sorteios do dia pelo horário
+                    let sorteiosDoDia = data[dataKey].sort((a, b) => a.horario.localeCompare(b.horario));
+                    sorteiosDoDia.forEach(sorteio => {
+                        linhaDoTempo.push(sorteio);
+                    });
+                });
+                
+                document.getElementById('loader').style.display = 'none';
+            } catch (error) {
+                document.getElementById('loader').innerText = "Erro ao carregar bd_lotep_2026.json. Verifique se o arquivo está no servidor.";
+            }
+        }
+
+        // --- LÓGICA DO PILAR 1: GRUPO ---
+        function analisarGrupo() {
+            const bichoAlvo = document.getElementById('input-grupo').value.trim().toLowerCase();
+            if (!bichoAlvo) return;
+
+            let contagemProximos = {};
+            let totalOcorrencias = 0;
+
+            for (let i = 0; i < linhaDoTempo.length - 1; i++) {
+                // Checar se o bicho do 1º prêmio corresponde
+                let bichoPrimeiroPremio = linhaDoTempo[i].linhas[0].bicho.toLowerCase();
+                
+                if (bichoPrimeiroPremio === bichoAlvo) {
+                    // Pegar o bicho que saiu em 1º no SORTEIO SEGUINTE
+                    let proximoBicho = linhaDoTempo[i + 1].linhas[0].bicho;
+                    contagemProximos[proximoBicho] = (contagemProximos[proximoBicho] || 0) + 1;
+                    totalOcorrencias++;
+                }
+            }
+
+            let rankingArray = Object.keys(contagemProximos).map(key => {
+                return { bicho: key, qtd: contagemProximos[key] };
+            });
+
+            // Ordenar do maior para o menor
+            rankingArray.sort((a, b) => b.qtd - a.qtd);
+
+            mostrarResultadoGrupo(bichoAlvo, rankingArray, totalOcorrencias);
+        }
+
+        function mostrarResultadoGrupo(bichoAlvo, ranking, total) {
+            const div = document.getElementById('resultado-grupo');
+            if (ranking.length === 0) {
+                div.innerHTML = `<div class="result-box">Nenhum dado subsequente encontrado para <b>${bichoAlvo}</b>.</div>`;
+                return;
+            }
+
+            let html = `<div class="result-box">
+                <h4>Quando deu ${bichoAlvo.toUpperCase()} no 1º prêmio (Base: ${total} vezes):</h4>`;
+            
+            ranking.slice(0, 10).forEach((item, index) => {
+                let porcentagem = ((item.qtd / total) * 100).toFixed(1);
+                html += `
+                    <div class="ranking-item">
+                        <span>${index + 1}º - <b>${item.bicho}</b></span>
+                        <span>${item.qtd}x (${porcentagem}%)</span>
+                    </div>`;
+            });
+            html += `</div>`;
+            div.innerHTML = html;
+        }
+
+        // --- LÓGICA DO PILAR 2: TERNO ---
+        // Função auxiliar para calcular combinações simples de tamanho K
+        function getCombinations(array, size) {
+            let result = [];
+            function p(t, i) {
+                if (t.length === size) { result.push(t); return; }
+                if (i + 1 <= array.length) { p(t.concat(array[i]), i + 1); p(t, i + 1); }
+            }
+            p([], 0);
+            return result;
+        }
+
+        function analisarTernos() {
+            document.getElementById('resultado-terno').innerHTML = `<div class="loader">Processando combinações...</div>`;
+            
+            setTimeout(() => {
+                let ternosContagem = {};
+
+                linhaDoTempo.forEach(sorteio => {
+                    // Extrair bichos únicos dos prêmios 1 ao 5
+                    let bichos1ao5 = Array.from(new Set(sorteio.linhas.slice(0, 5).map(l => l.bicho)));
+                    // Extrair bichos únicos dos prêmios 6 ao 10
+                    let bichos6ao10 = Array.from(new Set(sorteio.linhas.slice(5, 10).map(l => l.bicho)));
+
+                    if (bichos1ao5.length >= 3) {
+                        getCombinations(bichos1ao5, 3).forEach(combo => {
+                            let chave = combo.sort().join(" - ");
+                            ternosContagem[chave] = (ternosContagem[chave] || 0) + 1;
+                        });
+                    }
+
+                    if (bichos6ao10.length >= 3) {
+                        getCombinations(bichos6ao10, 3).forEach(combo => {
+                            let chave = combo.sort().join(" - ");
+                            ternosContagem[chave] = (ternosContagem[chave] || 0) + 1;
+                        });
+                    }
+                });
+
+                let rankingTernos = Object.keys(ternosContagem).map(key => {
+                    return { terno: key, qtd: ternosContagem[key] };
+                });
+
+                rankingTernos.sort((a, b) => b.qtd - a.qtd);
+
+                mostrarResultadoTernos(rankingTernos);
+            }, 100); // Timeout rápido para a UI não travar enquanto calcula
+        }
+
+        function mostrarResultadoTernos(ranking) {
+            const div = document.getElementById('resultado-terno');
+            let html = `<div class="result-box"><h4>Top 15 Ternos mais frequentes (1/5 ou 6/10)</h4>`;
+            
+            ranking.slice(0, 15).forEach((item, index) => {
+                html += `
+                    <div class="ranking-item">
+                        <span>${index + 1}º - <b>${item.terno}</b></span>
+                        <span>${item.qtd} aparições</span>
+                    </div>`;
+            });
+            html += `</div>`;
+            div.innerHTML = html;
+        }
+
+        // --- LÓGICA DO PILAR 3: PALPITE COMPLETO ---
+        function gerarCamposPalpite() {
+            const container = document.getElementById('inputs-palpite');
+            let html = '';
+            for (let i = 1; i <= 10; i++) {
+                html += `<input type="text" id="palp-pos-${i}" placeholder="Bicho do ${i}º Prêmio" required>`;
+            }
+            container.innerHTML = html;
+        }
+
+        function gerarPalpite() {
+            let palpiteResultado = [];
+            
+            for (let pos = 1; pos <= 10; pos++) {
+                let bichoInputado = document.getElementById(`palp-pos-${pos}`).value.trim().toLowerCase();
+                if (!bichoInputado) {
+                    alert("Por favor, preencha todos os 10 bichos do último sorteio.");
+                    return;
+                }
+
+                let contagemProximosPosicao = {};
+                
+                // Analisa o histórico baseando-se ESPECIFICAMENTE naquela posição
+                for (let i = 0; i < linhaDoTempo.length - 1; i++) {
+                    let bichoSorteioAtual = linhaDoTempo[i].linhas[pos - 1].bicho.toLowerCase();
+                    
+                    if (bichoSorteioAtual === bichoInputado) {
+                        let proximoBichoNestaPosicao = linhaDoTempo[i + 1].linhas[pos - 1].bicho;
+                        contagemProximosPosicao[proximoBichoNestaPosicao] = (contagemProximosPosicao[proximoBichoNestaPosicao] || 0) + 1;
+                    }
+                }
+
+                // Acha o bicho mais frequente subsequente para aquela posição
+                let bichoMaisProvavel = "Sem dados";
+                let maxQtd = 0;
+                
+                for (let [bicho, qtd] of Object.entries(contagemProximosPosicao)) {
+                    if (qtd > maxQtd) {
+                        maxQtd = qtd;
+                        bichoMaisProvavel = bicho;
+                    }
+                }
+                
+                palpiteResultado.push({ posicao: pos, bicho: bichoMaisProvavel, base: maxQtd });
+            }
+
+            mostrarResultadoPalpite(palpiteResultado);
+        }
+
+        function mostrarResultadoPalpite(palpite) {
+            const div = document.getElementById('resultado-palpite');
+            let html = `<div class="result-box"><h4>Palpite Inteligente para o Próximo Sorteio:</h4>`;
+            
+            palpite.forEach(item => {
+                let confiança = item.base > 0 ? `(Baseado em ${item.base} padrões)` : `(Sem histórico exato)`;
+                html += `
+                    <div class="ranking-item">
+                        <span>${item.posicao}º Prêmio: <b>${item.bicho}</b></span>
+                        <span style="font-size: 0.8rem; color: #666;">${confiança}</span>
+                    </div>`;
+            });
+            html += `</div>`;
+            div.innerHTML = html;
+        }
+    </script>
+</body>
+</html>
+
