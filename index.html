@@ -60,7 +60,7 @@
         input, button {
             width: 100%;
             padding: 12px;
-            margin: 10px 0;
+            margin: 8px 0;
             border-radius: 5px;
             border: 1px solid #ccc;
             box-sizing: border-box;
@@ -72,6 +72,7 @@
             border: none;
             font-weight: bold;
             cursor: pointer;
+            margin-top: 15px;
         }
         button:hover {
             background-color: #004494;
@@ -92,7 +93,38 @@
         .ranking-item:last-child {
             border-bottom: none;
         }
-        .loader {
+        .palpite-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+        .palpite-grid input {
+            margin: 0;
+        }
+        
+        /* Sistema de Barra de Carregamento */
+        .loading-bar {
+            display: none;
+            width: 100%;
+            height: 8px;
+            background-color: #e0e0e0;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 15px;
+            position: relative;
+        }
+        .loading-progress {
+            width: 50%;
+            height: 100%;
+            background-color: var(--primary);
+            position: absolute;
+            animation: loadingAnimation 1s infinite linear;
+        }
+        @keyframes loadingAnimation {
+            0% { left: -50%; }
+            100% { left: 100%; }
+        }
+        .loader-text {
             text-align: center;
             font-weight: bold;
             color: var(--primary);
@@ -106,6 +138,303 @@
 
     <div class="tabs">
         <div class="tab active" onclick="showTab('grupo')">GRUPO</div>
+        <div class="tab" onclick="showTab('terno')">TERNO</div>
+        <div class="tab" onclick="showTab('palpite')">PALPITE</div>
+    </div>
+
+    <div class="container">
+        <div id="loader-inicial" class="loader-text">Carregando dados estatísticos...</div>
+
+        <!-- SEÇÃO GRUPO -->
+        <div id="grupo" class="section active">
+            <h3>Consultar Grupo (1º Prêmio)</h3>
+            <p>Qual foi o último bicho que deu em 1º lugar?</p>
+            <input type="text" id="input-grupo" placeholder="Ex: Gato, Avestruz...">
+            <button onclick="analisarGrupo()">Analisar Próximos</button>
+            <div id="loading-grupo" class="loading-bar"><div class="loading-progress"></div></div>
+            <div id="resultado-grupo"></div>
+        </div>
+
+        <!-- SEÇÃO TERNO -->
+        <div id="terno" class="section">
+            <h3>Ternos Consecutivos (Inteligente)</h3>
+            <p>Digite o bicho do 1º prêmio para ver o ranking dos ternos que mais saíram no <b>sorteio seguinte</b>.</p>
+            <input type="text" id="input-terno" placeholder="Ex: Gato, Avestruz...">
+            <button onclick="analisarTernos()">Gerar Top Ternos</button>
+            <div id="loading-terno" class="loading-bar"><div class="loading-progress"></div></div>
+            <div id="resultado-terno"></div>
+        </div>
+
+        <!-- SEÇÃO PALPITE COMPLETO -->
+        <div id="palpite" class="section">
+            <h3>Palpite Completo</h3>
+            <p>Digite os 10 bichos do último resultado. O app analisará linha por linha.</p>
+            <div id="inputs-palpite" class="palpite-grid">
+                <!-- Inputs gerados via JS (2 colunas) -->
+            </div>
+            <button onclick="gerarPalpite()">Gerar Palpite Inteligente</button>
+            <div id="loading-palpite" class="loading-bar"><div class="loading-progress"></div></div>
+            <div id="resultado-palpite"></div>
+        </div>
+    </div>
+
+    <script>
+        let linhaDoTempo = [];
+
+        document.addEventListener("DOMContentLoaded", () => {
+            fetchData();
+            gerarCamposPalpite();
+        });
+
+        function showTab(tabId) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+            
+            event.target.classList.add('active');
+            document.getElementById(tabId).classList.add('active');
+        }
+
+        async function fetchData() {
+            try {
+                const response = await fetch('bd_lotep_2026.json');
+                const data = await response.json();
+                
+                const datasOrdenadas = Object.keys(data).sort();
+                datasOrdenadas.forEach(dataKey => {
+                    let sorteiosDoDia = data[dataKey].sort((a, b) => a.horario.localeCompare(b.horario));
+                    sorteiosDoDia.forEach(sorteio => {
+                        linhaDoTempo.push(sorteio);
+                    });
+                });
+                
+                document.getElementById('loader-inicial').style.display = 'none';
+            } catch (error) {
+                document.getElementById('loader-inicial').innerText = "Erro ao carregar o banco de dados. Verifique o arquivo bd_lotep_2026.json.";
+            }
+        }
+
+        // --- PILAR 1: GRUPO ---
+        function analisarGrupo() {
+            const bichoAlvo = document.getElementById('input-grupo').value.trim().toLowerCase();
+            if (!bichoAlvo) return;
+
+            document.getElementById('resultado-grupo').innerHTML = '';
+            document.getElementById('loading-grupo').style.display = 'block';
+
+            setTimeout(() => {
+                let contagemProximos = {};
+                let totalOcorrencias = 0;
+
+                for (let i = 0; i < linhaDoTempo.length - 1; i++) {
+                    if (!linhaDoTempo[i].linhas[0] || !linhaDoTempo[i+1].linhas[0]) continue;
+
+                    let bichoPrimeiroPremio = linhaDoTempo[i].linhas[0].bicho.toLowerCase();
+                    
+                    if (bichoPrimeiroPremio === bichoAlvo) {
+                        let proximoBicho = linhaDoTempo[i + 1].linhas[0].bicho;
+                        contagemProximos[proximoBicho] = (contagemProximos[proximoBicho] || 0) + 1;
+                        totalOcorrencias++;
+                    }
+                }
+
+                let rankingArray = Object.keys(contagemProximos).map(key => {
+                    return { bicho: key, qtd: contagemProximos[key] };
+                });
+                rankingArray.sort((a, b) => b.qtd - a.qtd);
+
+                document.getElementById('loading-grupo').style.display = 'none';
+                mostrarResultadoGrupo(bichoAlvo, rankingArray, totalOcorrencias);
+            }, 100);
+        }
+
+        function mostrarResultadoGrupo(bichoAlvo, ranking, total) {
+            const div = document.getElementById('resultado-grupo');
+            if (ranking.length === 0) {
+                div.innerHTML = `<div class="result-box">Nenhum dado subsequente para <b>${bichoAlvo}</b>.</div>`;
+                return;
+            }
+
+            let html = `<div class="result-box">
+                <h4>Quando deu ${bichoAlvo.toUpperCase()} (Base: ${total}x):</h4>`;
+            
+            ranking.slice(0, 10).forEach((item, index) => {
+                let porcentagem = ((item.qtd / total) * 100).toFixed(1);
+                html += `
+                    <div class="ranking-item">
+                        <span>${index + 1}º - <b>${item.bicho}</b></span>
+                        <span>${item.qtd}x (${porcentagem}%)</span>
+                    </div>`;
+            });
+            html += `</div>`;
+            div.innerHTML = html;
+        }
+
+        // --- PILAR 2: TERNO INTELIGENTE ---
+        function getCombinations(array, size) {
+            let result = [];
+            function p(t, i) {
+                if (t.length === size) { result.push(t); return; }
+                if (i + 1 <= array.length) { p(t.concat(array[i]), i + 1); p(t, i + 1); }
+            }
+            p([], 0);
+            return result;
+        }
+
+        function analisarTernos() {
+            const bichoAlvo = document.getElementById('input-terno').value.trim().toLowerCase();
+            if (!bichoAlvo) {
+                alert("Digite o bicho que deu no 1º prêmio.");
+                return;
+            }
+
+            document.getElementById('resultado-terno').innerHTML = '';
+            document.getElementById('loading-terno').style.display = 'block';
+            
+            setTimeout(() => {
+                let ternosContagem = {};
+                let baseCount = 0;
+
+                for (let i = 0; i < linhaDoTempo.length - 1; i++) {
+                    if (!linhaDoTempo[i].linhas[0]) continue;
+
+                    let bichoPrimeiro = linhaDoTempo[i].linhas[0].bicho.toLowerCase();
+                    
+                    if (bichoPrimeiro === bichoAlvo) {
+                        baseCount++;
+                        let proximoSorteio = linhaDoTempo[i + 1];
+
+                        let bichos1ao5 = Array.from(new Set(proximoSorteio.linhas.slice(0, 5).map(l => l.bicho)));
+                        let bichos6ao10 = Array.from(new Set(proximoSorteio.linhas.slice(5, 10).map(l => l.bicho)));
+
+                        if (bichos1ao5.length >= 3) {
+                            getCombinations(bichos1ao5, 3).forEach(combo => {
+                                let chave = combo.sort().join(" - ");
+                                ternosContagem[chave] = (ternosContagem[chave] || 0) + 1;
+                            });
+                        }
+                        if (bichos6ao10.length >= 3) {
+                            getCombinations(bichos6ao10, 3).forEach(combo => {
+                                let chave = combo.sort().join(" - ");
+                                ternosContagem[chave] = (ternosContagem[chave] || 0) + 1;
+                            });
+                        }
+                    }
+                }
+
+                let rankingTernos = Object.keys(ternosContagem).map(key => {
+                    return { terno: key, qtd: ternosContagem[key] };
+                });
+                rankingTernos.sort((a, b) => b.qtd - a.qtd);
+
+                document.getElementById('loading-terno').style.display = 'none';
+                mostrarResultadoTernos(rankingTernos, bichoAlvo, baseCount);
+            }, 100); 
+        }
+
+        function mostrarResultadoTernos(ranking, bichoAlvo, total) {
+            const div = document.getElementById('resultado-terno');
+            if (ranking.length === 0) {
+                div.innerHTML = `<div class="result-box">Dados insuficientes para calcular ternos após ${bichoAlvo.toUpperCase()}.</div>`;
+                return;
+            }
+
+            let html = `<div class="result-box"><h4>Quando deu ${bichoAlvo.toUpperCase()}, no sorteio seguinte saíram esses Ternos (Base: ${total}x)</h4>`;
+            
+            ranking.slice(0, 15).forEach((item, index) => {
+                html += `
+                    <div class="ranking-item">
+                        <span>${index + 1}º - <b>${item.terno}</b></span>
+                        <span>${item.qtd}x</span>
+                    </div>`;
+            });
+            html += `</div>`;
+            div.innerHTML = html;
+        }
+
+        // --- PILAR 3: PALPITE COMPLETO ---
+        function gerarCamposPalpite() {
+            const container = document.getElementById('inputs-palpite');
+            let html = '';
+            for (let i = 1; i <= 10; i++) {
+                html += `<input type="text" id="palp-pos-${i}" placeholder="${i}º Prêmio" required>`;
+            }
+            container.innerHTML = html;
+        }
+
+        function gerarPalpite() {
+            let entradas = [];
+            for (let pos = 1; pos <= 10; pos++) {
+                let val = document.getElementById(`palp-pos-${pos}`).value.trim().toLowerCase();
+                if (!val) {
+                    alert("Por favor, preencha todos os 10 bichos do último sorteio.");
+                    return;
+                }
+                entradas.push(val);
+            }
+
+            document.getElementById('resultado-palpite').innerHTML = '';
+            document.getElementById('loading-palpite').style.display = 'block';
+
+            setTimeout(() => {
+                try {
+                    let palpiteResultado = [];
+                    
+                    for (let pos = 1; pos <= 10; pos++) {
+                        let bichoInputado = entradas[pos - 1];
+                        let contagemProximosPosicao = {};
+                        
+                        for (let i = 0; i < linhaDoTempo.length - 1; i++) {
+                            // Prevenção de quebra: Pula caso o sorteio não tenha 10 prêmios cadastrados
+                            if (!linhaDoTempo[i].linhas[pos - 1] || !linhaDoTempo[i + 1].linhas[pos - 1]) continue;
+
+                            let bichoSorteioAtual = linhaDoTempo[i].linhas[pos - 1].bicho.toLowerCase();
+                            
+                            if (bichoSorteioAtual === bichoInputado) {
+                                let proximoBicho = linhaDoTempo[i + 1].linhas[pos - 1].bicho;
+                                contagemProximosPosicao[proximoBicho] = (contagemProximosPosicao[proximoBicho] || 0) + 1;
+                            }
+                        }
+
+                        let bichoMaisProvavel = "Sem dados";
+                        let maxQtd = 0;
+                        
+                        for (let [bicho, qtd] of Object.entries(contagemProximosPosicao)) {
+                            if (qtd > maxQtd) {
+                                maxQtd = qtd;
+                                bichoMaisProvavel = bicho;
+                            }
+                        }
+                        
+                        palpiteResultado.push({ posicao: pos, bicho: bichoMaisProvavel, base: maxQtd });
+                    }
+
+                    document.getElementById('loading-palpite').style.display = 'none';
+                    mostrarResultadoPalpite(palpiteResultado);
+                } catch (e) {
+                    document.getElementById('loading-palpite').style.display = 'none';
+                    document.getElementById('resultado-palpite').innerHTML = `<div class="result-box" style="color:red;">Erro no processamento. Verifique se o JSON está correto. Detalhe: ${e.message}</div>`;
+                }
+            }, 100); 
+        }
+
+        function mostrarResultadoPalpite(palpite) {
+            const div = document.getElementById('resultado-palpite');
+            let html = `<div class="result-box"><h4>Palpite Inteligente para o Próximo Sorteio:</h4>`;
+            
+            palpite.forEach(item => {
+                let confianca = item.base > 0 ? `(${item.base} bases)` : `(Novo)`;
+                html += `
+                    <div class="ranking-item">
+                        <span>${item.posicao}º : <b>${item.bicho}</b></span>
+                        <span style="font-size: 0.8rem; color: #666;">${confianca}</span>
+                    </div>`;
+            });
+            html += `</div>`;
+            div.innerHTML = html;
+        }
+    </script>
+</body>
+</html>
         <div class="tab" onclick="showTab('terno')">TERNO</div>
         <div class="tab" onclick="showTab('palpite')">PALPITE</div>
     </div>
