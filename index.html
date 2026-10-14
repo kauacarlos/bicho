@@ -52,21 +52,32 @@ hr.sep { border:none; border-top:1px solid var(--border); margin:18px 0; }
 <div class="sub" id="headerInfo"></div>
 
 <div class="card">
-  <h2>Combinações (duplas / trios)</h2>
+  <h2>🔢 Duques e ternos por bicho</h2>
+  <div class="sub" style="margin-bottom:12px;">Escolha um bicho que já saiu em 1º prêmio — mostra os duques/ternos que mais se repetiram nos sorteios em que ele apareceu.</div>
   <div class="field"><label>Dados</label><div class="pills" id="c1-dataset"></div></div>
-  <div class="field"><label>Combinação de</label><div class="pills" id="c1-size"></div></div>
-  <div class="field">
-    <label>Faixa de prêmio</label>
-    <div class="pills" id="c1-range"></div>
-    <div class="row" id="c1-custom" style="margin-top:8px; display:none;">
-      <div><label>Do prêmio</label><input type="number" id="c1-pStart" min="1" max="10" value="1"></div>
-      <div><label>Ao prêmio</label><input type="number" id="c1-pEnd" min="1" max="10" value="5"></div>
-    </div>
+  <div class="row">
+    <div class="field"><label>Bicho que deu</label><select id="c1-bicho"></select></div>
+    <div class="field"><label>Horário</label><select id="c1-horario-select">
+      <option value="Geral">Geral</option>
+      <option value="10:45">10:45</option><option value="12:45">12:45</option>
+      <option value="15:45">15:45</option><option value="18:00">18:00</option>
+    </select></div>
   </div>
-  <div class="field"><label>Horário</label><div class="pills" id="c1-horario"></div></div>
+  <div class="field"><label>Combinação de</label><div class="pills" id="c1-size"></div></div>
   <div class="count-info" id="c1-info"></div>
 </div>
-<div class="card wrap-scroll"><table><thead><tr><th>#</th><th>Combinação</th><th>Vezes juntos</th></tr></thead><tbody id="c1-tbody"></tbody></table></div>
+<div class="card wrap-scroll">
+  <h2 style="font-size:0.9rem;">1º ao 10º prêmio</h2>
+  <table><thead><tr><th>#</th><th>Combinação</th><th>Vezes</th></tr></thead><tbody id="c1-tbody-full"></tbody></table>
+</div>
+<div class="card wrap-scroll">
+  <h2 style="font-size:0.9rem;">1º ao 5º prêmio</h2>
+  <table><thead><tr><th>#</th><th>Combinação</th><th>Vezes</th></tr></thead><tbody id="c1-tbody-15"></tbody></table>
+</div>
+<div class="card wrap-scroll">
+  <h2 style="font-size:0.9rem;">6º ao 10º prêmio</h2>
+  <table><thead><tr><th>#</th><th>Combinação</th><th>Vezes</th></tr></thead><tbody id="c1-tbody-610"></tbody></table>
+</div>
 
 <hr class="sep">
 
@@ -154,49 +165,72 @@ function getCombinations(arr, k) {
   return res;
 }
 
-/* ---------- Card 1: combinações ---------- */
-const SIZES=[{label:"Duplas (2)",value:2},{label:"Trios (3)",value:3}];
-const RANGES=[{label:"1º ao 5º",start:1,end:5},{label:"6º ao 10º",start:6,end:10},{label:"1º ao 10º",start:1,end:10},{label:"Personalizado",custom:true}];
+/* ---------- Card 1: duques/ternos por bicho ---------- */
+const SIZES=[{label:"Duques (2)",value:2},{label:"Ternos (3)",value:3}];
 const HORARIOS=["Geral","10:45","12:45","15:45","18:00"];
-let s1={dataset:"Geral",size:2,rangeIdx:0,horario:"Geral"};
+let s1={dataset:"Geral",size:2};
 
 function renderC1Controls(){
-  buildPills(document.getElementById('c1-dataset'), Object.keys(DATASETS), d=>d===s1.dataset, d=>{s1.dataset=d; renderC1Controls(); renderC1();});
+  buildPills(document.getElementById('c1-dataset'), Object.keys(DATASETS), d=>d===s1.dataset, d=>{s1.dataset=d; renderC1Controls(); popularBichoSelectC1(); renderC1();});
   buildPills(document.getElementById('c1-size'), SIZES, i=>i.value===s1.size, i=>{s1.size=i.value; renderC1Controls(); renderC1();});
-  buildPills(document.getElementById('c1-range'), RANGES, (i,idx)=>idx===s1.rangeIdx, (i,idx)=>{s1.rangeIdx=idx; document.getElementById('c1-custom').style.display=i.custom?'flex':'none'; renderC1Controls(); renderC1();});
-  buildPills(document.getElementById('c1-horario'), HORARIOS, i=>i===s1.horario, i=>{s1.horario=i; renderC1Controls(); renderC1();});
 }
-function computeC1(ds, pStart, pEnd, horario, size){
-  const counts=new Map(); let n=0;
+function listaBichosTodos(ds){
+  const set=new Set();
+  for(const dia in ds) for(const draw of ds[dia]) for(const l of draw.linhas) if(l.premio>=1&&l.premio<=10) set.add(l.bicho);
+  return [...set].sort();
+}
+function popularBichoSelectC1(){
+  const sel=document.getElementById('c1-bicho'); const atual=sel.value;
+  sel.innerHTML='';
+  listaBichos(DATASETS[s1.dataset]).forEach(b=>{ const o=document.createElement('option'); o.value=b; o.textContent=b; sel.appendChild(o); });
+  if([...sel.options].some(o=>o.value===atual)) sel.value=atual;
+}
+function filtrarDrawsComBicho(ds, bicho, horario){
+  const draws=[];
   for(const dia in ds){ for(const draw of ds[dia]){
     if(horario!=="Geral" && draw.horario!==horario) continue;
+    if(draw.linhas.some(l=>l.premio===1 && l.bicho===bicho)) draws.push(draw);
+  }}
+  return draws;
+}
+function contarCombos(draws, pStart, pEnd, size){
+  const counts=new Map(); let n=0;
+  for(const draw of draws){
     const bichos=new Set();
     for(const l of draw.linhas) if(l.premio>=pStart && l.premio<=pEnd) bichos.add(l.bicho);
     const arr=[...bichos].sort();
     if(arr.length<size) continue;
     n++;
-    for(const combo of getCombinations(arr,size)) counts.set(combo.join(" + "), (counts.get(combo.join(" + "))||0)+1);
-  }}
+    for(const combo of getCombinations(arr,size)){ const k=combo.join(" + "); counts.set(k,(counts.get(k)||0)+1); }
+  }
   return {ranked:[...counts.entries()].sort((a,b)=>b[1]-a[1]), n};
 }
-function renderC1(){
-  let pStart,pEnd; const r=RANGES[s1.rangeIdx];
-  if(r.custom){ pStart=parseInt(document.getElementById('c1-pStart').value)||1; pEnd=parseInt(document.getElementById('c1-pEnd').value)||1; }
-  else { pStart=r.start; pEnd=r.end; }
-  if(pStart<1)pStart=1; if(pEnd>10)pEnd=10; if(pStart>pEnd)[pStart,pEnd]=[pEnd,pStart];
-  const {ranked,n}=computeC1(DATASETS[s1.dataset], pStart, pEnd, s1.horario, s1.size);
-  document.getElementById('c1-info').textContent = `${n} sorteio(s) — base ${s1.dataset} — prêmios ${pStart}º-${pEnd}º — horário ${s1.horario}`;
-  const tbody=document.getElementById('c1-tbody'); tbody.innerHTML='';
+function preencherTabelaC1(id, ranked, n){
+  const tbody=document.getElementById(id); tbody.innerHTML='';
   const max=ranked.length?ranked[0][1]:1;
-  ranked.slice(0,60).forEach(([combo,count],idx)=>{
+  ranked.slice(0,25).forEach(([combo,count],idx)=>{
     const pct=(count/max)*100;
     const tr=document.createElement('tr');
     tr.innerHTML=`<td>${idx+1}</td><td class="bar-wrap"><div class="bar" style="width:${pct}%"></div><span class="bar-cell duo">${combo}</span></td><td class="num">${count}</td>`;
     tbody.appendChild(tr);
   });
-  if(!ranked.length) tbody.innerHTML='<tr><td colspan="3">Sem dados.</td></tr>';
+  if(!ranked.length) tbody.innerHTML=`<tr><td colspan="3">Sem dados (${n} sorteios com casos suficientes).</td></tr>`;
 }
-document.getElementById('c1-custom').addEventListener('input', renderC1);
+function renderC1(){
+  const bicho=document.getElementById('c1-bicho').value;
+  const horario=document.getElementById('c1-horario-select').value;
+  if(!bicho) return;
+  const draws=filtrarDrawsComBicho(DATASETS[s1.dataset], bicho, horario);
+  document.getElementById('c1-info').textContent = `${draws.length} sorteio(s) com "${bicho}" — base ${s1.dataset} — horário ${horario}`;
+  const full=contarCombos(draws,1,10,s1.size);
+  const r15=contarCombos(draws,1,5,s1.size);
+  const r610=contarCombos(draws,6,10,s1.size);
+  preencherTabelaC1('c1-tbody-full', full.ranked, full.n);
+  preencherTabelaC1('c1-tbody-15', r15.ranked, r15.n);
+  preencherTabelaC1('c1-tbody-610', r610.ranked, r610.n);
+}
+document.getElementById('c1-bicho').addEventListener('change', renderC1);
+document.getElementById('c1-horario-select').addEventListener('change', renderC1);
 
 /* ---------- Card 2: previsão ---------- */
 let s2={dataset:"Geral"};
@@ -331,7 +365,7 @@ function renderInsights(){
   `;
 }
 
-renderC1Controls(); renderC1();
+renderC1Controls(); popularBichoSelectC1(); renderC1();
 renderC2Controls(); popularBichoSelect(); renderC2();
 renderC3Controls(); renderC3();
 renderInsights();
